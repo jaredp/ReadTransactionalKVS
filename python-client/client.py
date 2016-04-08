@@ -56,6 +56,7 @@ class Transaction(object):
         self.dbCache = {}
         self.printCache = []
 
+    # transaction interaction management
     def get(self, key):
         if key in self.dbCache:
             return self.dbCache[key]
@@ -72,6 +73,14 @@ class Transaction(object):
         self.dirty.add(key)
         self.dbCache[key] = value
 
+    # pythonic operator overloading
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def __setitem__(self, key, value):
+        return self.set(key, value)
+
+    # side effect buffering
     def prnt(self, line):
         self.printCache.append(line)
 
@@ -79,6 +88,7 @@ class Transaction(object):
         for line in self.printCache:
             print line
 
+    # submit the commit
     def commit(self):
         deps = list(self.deps)
         patch = {k: str(v) for k, v in self.dbCache.items() if k in self.dirty}
@@ -90,6 +100,7 @@ class Transaction(object):
 
 def transaction(server, fn):
     succeeded = False
+    # retry the transaction until it succeeds
     while succeeded == False:
         txn = Transaction(server)
         try:
@@ -99,6 +110,7 @@ def transaction(server, fn):
         else:
             succeeded = txn.commit()
     txn.flush_side_effects()
+
 
 def with_txn(server):
     def wrapper(fn):
@@ -110,19 +122,14 @@ server = KVServerAPI()
 
 @with_txn(server)
 def _(txn):
-    if txn.get('/a') == '':
-        txn.set('/a', 10)
-        txn.prnt(txn.get('/a'))
+    if txn['/a'] == '':
+        txn['/a'] = 10
+        txn.prnt(txn['/a'])
 
 
 @with_txn(server)
 def _(txn):
-    a = int(txn.get('/a'))
-    if txn.get('/b') == '':
-        b = 0
-    else:
-        b = int(txn.get('/b'))
-    txn.prnt("got " + str(a))
-    txn.set('/b', a + b + 10)
+    txn.prnt("got " + str(txn['/b']))
+    txn.set('/b', int(txn['/a']) + int(txn['/b'] or 0) + 10)
 
 

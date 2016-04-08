@@ -14,6 +14,8 @@ last_txn = 0
 app.get '/head', (req, res) ->
     res.send(String(last_txn))
 
+## Read {@param key} as of version {@param version}
+# if the key has been updated since then, return status 410, and no data
 app.get '/read/:version/:key(*)', (req, res) ->
     {version, key} = req.params
     # FIXME typecheck
@@ -40,6 +42,9 @@ app.get '/read/:version/:key(*)', (req, res) ->
     else
         res.send(String(stored_value))
 
+## Classic compare-and-set operation, but with all deps tested to check
+# that they haven't changed since {@param version}, and the patch is of
+# a set of multiple values not necessarily corresponding to the deps.
 # version: txn_id
 # deps: [key]
 # patch: {key: value}
