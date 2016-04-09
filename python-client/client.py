@@ -2,6 +2,9 @@ import requests
 
 OutOfDateSentinal = object()
 
+class OutOfDateException(BaseException):
+    pass
+
 class KVServerAPI(object):
     def __init__(self, host = "http://localhost:5681/"):
         self.host = host
@@ -63,7 +66,7 @@ class Transaction(object):
 
         value = self.server.do_get(self.version, key)
         if value == OutOfDateSentinal:
-            raise OutOfDateSentinal
+            raise OutOfDateException()
 
         self.deps.add(key)
         self.dbCache[key] = value
@@ -105,7 +108,7 @@ def transaction(server, fn):
         txn = Transaction(server)
         try:
             fn(txn)
-        except OutOfDateSentinal:
+        except OutOfDateException:
             succeeded = False
         else:
             succeeded = txn.commit()
@@ -126,10 +129,10 @@ def _(txn):
         txn['/a'] = 10
         txn.prnt(txn['/a'])
 
-
-@with_txn(server)
-def _(txn):
-    txn.prnt("got " + str(txn['/b']))
-    txn.set('/b', int(txn['/a']) + int(txn['/b'] or 0) + 10)
+while True:
+    @with_txn(server)
+    def _(txn):
+        txn.prnt("got " + str(txn['/b']))
+        txn.set('/b', int(txn['/a']) + int(txn['/b'] or 0) + 10)
 
 
