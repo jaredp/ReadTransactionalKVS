@@ -1,6 +1,7 @@
 import concurrent.futures
 from timeit import default_timer as timer
 import kvs_client
+import psycopg2
 import redis
 
 def benchmark(client, fn, num_transactions=1000, num_workers=5):
@@ -34,6 +35,25 @@ def spawn_kvs_transaction(client):
     latency = timer() - start
     return latency
 
+def initialize_postgres(conn):
+    with conn.cursor() as cur:
+        cur.execute("CREATE TABLE IF NOT EXISTS keys(key VARCHAR(20), value INT);")
+        cur.execute("INSERT INTO keys VALUES('a',0);")
+        cur.execute("INSERT INTO keys VALUES('b',0);")
+
+def spawn_postgres_transaction(conn):
+    start = timer()
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT * from keys WHERE key='a';")
+        _, a = cur.fetchone()
+        cur.execute("SELECT * from keys WHERE key='b';")
+        _, b = cur.fetchone()
+        cur.execute("UPDATE keys SET value={} WHERE key='b';".format(a + b + 10))
+
+    latency = timer() - start
+    return latency
+
 def spawn_redis_transaction(client):
     start = timer()
 
@@ -58,6 +78,13 @@ if __name__ == '__main__':
     print("-------------------")
     client = kvs_client.KVSClient()
     benchmark(client, spawn_kvs_transaction)
+
+    print("------------------------")
+    print("Benchmarking Postgres...")
+    print("------------------------")
+    conn = psycopg2.connect(dbname='postgres')
+    initialize_postgres(conn)
+    benchmark(conn, spawn_postgres_transaction)
 
     print("---------------------")
     print("Benchmarking Redis...")
