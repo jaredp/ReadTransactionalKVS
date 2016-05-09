@@ -2,36 +2,54 @@ import psycopg2
 from common_client import Transaction, TransactionFailureException, KVServerException
 
 class SQLClient(object):
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, connection):
+        self.conn = connection
+        # transaction started by default
+        self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
+        self.curr = self.conn.cursor()
 
     def get_head(self):
         # SQL doesn't need versions
         return None
 
     def read(self, version, key):
-        # TODO
-        pass
+        self.curr.execute("SELECT value FROM kvpairs WHERE key=%s;", (key,))
+        sql_res = self.curr.fetchone()
+        if sql_res == None:
+            return ""
+        else:
+            (value,) = sql_res
+        return value
 
     def submit(self, version, deps, patch):
-        # TODO
-        pass
+        try:
+            for key, value in patch.items():
+                # manually do an upsert
+                self.curr.execute("""SELECT value FROM kvpairs WHERE key=%s;""", (key,))
+                if self.curr.fetchone() == None:
+                    self.curr.execute("""INSERT INTO kvpairs VALUES (%s, %s);""", (key, value))
+                else:
+                    self.curr.execute("""UPDATE kvpairs SET value=%s WHERE key=%s;""", (value, key))
+            self.conn.commit()
+        except psycopg2.extensions.TransactionRollbackError:
+            raise TransactionFailureException()
+
 
 class Connection(object):
     def __init__(self):
-        conn = psycopg2.connect(dbname='kvtransactional')
-        with conn.cursor() as cur:
+        with self.get_connection().cursor() as cur:
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS keys(
+                CREATE TABLE IF NOT EXISTS kvpairs (
                     key VARCHAR(100) PRIMARY KEY,
                     value VARCHAR(100)
                 );
             """)
-            cur.execute("INSERT INTO keys VALUES('a',0);")
-            cur.execute("INSERT INTO keys VALUES('b',0);")
+
+    def get_connection(self):
+        return psycopg2.connect(dbname='kvtransactional')
 
     def transaction(self):
-        return Transaction(SQLClient())
+        return Transaction(SQLClient(self.get_connection()))
 
 
 # def spawn_postgres_transaction(conn):

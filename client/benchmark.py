@@ -53,11 +53,11 @@ if __name__ == '__main__':
     client = kvs_client.Connection()
     benchmark(client, bench1)
 
-    # print("------------------------")
-    # print("Benchmarking Postgres...")
-    # print("------------------------")
-    # client = sql_client.Connection()
-    # benchmark(conn)
+    print("------------------------")
+    print("Benchmarking Postgres...")
+    print("------------------------")
+    client = sql_client.Connection()
+    benchmark(client, bench1)
 
     print("---------------------")
     print("Benchmarking Redis...")
