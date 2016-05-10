@@ -1,15 +1,14 @@
 import concurrent.futures
 
-# FIXME this is going to measure CPU time; we need a timer that will measure
-# Wall time
-from timeit import default_timer as timer
+# time.time returns wall time
+from time import time as timer
 
 from common_client import TransactionFailureException
 import kvs_client
 import redis_client
 import sql_client
 
-def benchmark(client, fn, num_transactions=20, num_workers=500, *args, **kwargs):
+def benchmark(client, fn, num_transactions=20, num_workers=50, *args, **kwargs):
     start = timer()
     total_latency = 0
 
@@ -25,8 +24,6 @@ def benchmark(client, fn, num_transactions=20, num_workers=500, *args, **kwargs)
         throughput = num_transactions / (timer() - start)
         print("Throughput: {} transactions per second".format(throughput))
 
-
-# FIXME using timeit.default_timer will result in the wrong time (!!)
 def time_transaction(fn):
     def wrapped(client, retry=False, *args, **kwargs):
         start = timer()
