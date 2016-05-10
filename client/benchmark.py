@@ -9,12 +9,12 @@ import kvs_client
 import redis_client
 import sql_client
 
-def benchmark(client, fn, num_transactions=20, num_workers=500):
+def benchmark(client, fn, num_transactions=20, num_workers=500, *args, **kwargs):
     start = timer()
     total_latency = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(time_transaction(fn), client) for _ in range(num_transactions)]
+        futures = [executor.submit(time_transaction(fn), client, *args, **kwargs) for _ in range(num_transactions)]
 
         for future in concurrent.futures.as_completed(futures):
             total_latency += future.result()
@@ -28,14 +28,20 @@ def benchmark(client, fn, num_transactions=20, num_workers=500):
 
 # FIXME using timeit.default_timer will result in the wrong time (!!)
 def time_transaction(fn):
-    def wrapped(client, *args, **kwargs):
+    def wrapped(client, retry=False, *args, **kwargs):
         start = timer()
-        try:
-            txn = client.transaction()
-            fn(txn, *args, **kwargs)
-            txn.commit()
-        except TransactionFailureException:
-            pass
+        success = False
+        while success == False:
+            try:
+                txn = client.transaction()
+                fn(txn, *args, **kwargs)
+                txn.commit()
+                success = True
+            except TransactionFailureException:
+                if not retry:
+                    break
+                else:
+                    continue
         latency = timer() - start
         return latency
     return wrapped
@@ -47,20 +53,11 @@ def bench1(txn):
     txn.set('/b', a + b + 10)
 
 if __name__ == '__main__':
-    print("-------------------")
-    print("Benchmarking KVS...")
-    print("-------------------")
-    client = kvs_client.Connection()
-    benchmark(client, bench1)
+    drivers = [kvs_client, sql_client, redis_client]
 
-    print("------------------------")
-    print("Benchmarking Postgres...")
-    print("------------------------")
-    client = sql_client.Connection()
-    benchmark(client, bench1)
-
-    print("---------------------")
-    print("Benchmarking Redis...")
-    print("---------------------")
-    client = redis_client.Connection()
-    benchmark(client, bench1)
+    for driver in drivers:
+        print("-------------------")
+        print("Benchmarking "+driver.__name__+"...")
+        print("-------------------")
+        client = driver.Connection()
+        benchmark(client, bench1, retry=True)
